@@ -5,7 +5,7 @@
 // =========================
 // Mode
 // =========================
-const bool HATCHING_MODE = false;   // false = normal incubation, true = hatching mode
+const bool HATCHING_MODE = true;   // false = normal incubation, true = hatching mode
 
 // =========================
 // Pin assignment
@@ -86,7 +86,7 @@ const float NORMAL_LED_HUM_HIGH  = 65.0;
 
 const float HATCH_LED_TEMP_LOW  = 37.0;
 const float HATCH_LED_TEMP_HIGH = 37.4;
-const float HATCH_LED_HUM_LOW   = 60.0;
+const float HATCH_LED_HUM_LOW   = 55.0;
 const float HATCH_LED_HUM_HIGH  = 75.0;
 
 // =========================
