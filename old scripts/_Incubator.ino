@@ -5,15 +5,13 @@
 // =========================
 // Mode
 // =========================
-const bool HATCHING_MODE = false;   // false = normal incubation, true = hatching mode
+const bool HATCHING_MODE = true;   // false = normal incubation, true = hatching mode
 
 // =========================
 // Pin assignment
 // =========================
-#define DHTPIN1 4
-#define DHTPIN2 5
-#define DHTPIN3 6
-#define DHTPIN4 7
+#define DHTPIN1 5
+#define DHTPIN2 7
 #define DHTTYPE DHT11
 
 #define RELAY_HEATER       2
@@ -33,8 +31,8 @@ const bool RELAY_ACTIVE_LOW = true;
 // Temperature control - normal mode
 // =========================
 const float NORMAL_SETPOINT_C = 37.5;
-const float NORMAL_ALWAYS_ON_BELOW_C  = 37.3;
-const float NORMAL_ALWAYS_OFF_ABOVE_C = 37.7;
+const float NORMAL_ALWAYS_ON_BELOW_C  = 37.2;
+const float NORMAL_ALWAYS_OFF_ABOVE_C = 37.8;
 
 const float NORMAL_CORRECTION_HIGH_TEMP_C = 37.7;
 const float NORMAL_CORRECTION_LOW_TEMP_C  = 37.3;
@@ -84,7 +82,7 @@ const float HATCH_HUM_HIGH_SETPOINT = 70.0;
 const float NORMAL_LED_TEMP_LOW  = 37.3;
 const float NORMAL_LED_TEMP_HIGH = 37.7;
 const float NORMAL_LED_HUM_LOW   = 45.0;
-const float NORMAL_LED_HUM_HIGH  = 60.0;
+const float NORMAL_LED_HUM_HIGH  = 65.0;
 
 const float HATCH_LED_TEMP_LOW  = 37.0;
 const float HATCH_LED_TEMP_HIGH = 37.4;
@@ -98,26 +96,12 @@ const float SENSOR_TEMP_MIN_C = 10.0;
 const float SENSOR_TEMP_MAX_C = 60.0;
 
 // =========================
-// Sensor offsets and average selection
+// Sensor offsets
 // =========================
-// Offset is added to the raw sensor reading before printing and before average.
-// Example: if S3 reads 37.0 but real temperature is 37.5, use TEMP_OFFSET_3 = 0.5.
-
-const float TEMP_OFFSET_1 = 1.3;
-const float HUM_OFFSET_1  = 9.0;
-const bool USE_SENSOR_1_IN_AVERAGE = false;   // false = print S1 but exclude from final average/control
-
-const float TEMP_OFFSET_2 = 0.8;
-const float HUM_OFFSET_2  = 12.0;
-const bool USE_SENSOR_2_IN_AVERAGE = true;
-
-const float TEMP_OFFSET_3 = 0.4;
-const float HUM_OFFSET_3  = 10.0;
-const bool USE_SENSOR_3_IN_AVERAGE = true;
-
-const float TEMP_OFFSET_4 = -0.4;
-const float HUM_OFFSET_4  = -6.0;
-const bool USE_SENSOR_4_IN_AVERAGE = false;   // false = print S4 but exclude from final average/control
+const float TEMP_OFFSET_1 = 0.0;
+const float HUM_OFFSET_1  = 14.0;
+const float TEMP_OFFSET_2 = 0.0;
+const float HUM_OFFSET_2  = 0.0;
 
 // =========================
 // Servo settings
@@ -138,8 +122,6 @@ const int EEPROM_HATCH_CORRECTION_ADDR  = 2;
 // =========================
 DHT dht1(DHTPIN1, DHTTYPE);
 DHT dht2(DHTPIN2, DHTTYPE);
-DHT dht3(DHTPIN3, DHTTYPE);
-DHT dht4(DHTPIN4, DHTTYPE);
 
 Servo servoLeft;
 Servo servoRight;
@@ -352,42 +334,19 @@ void rotateEggs() {
 }
 
 void checkServo() {
-  // Serial commands:
-  //   r or R : rotate eggs manually (disabled in hatching mode by rotateEggs())
-  //   +      : increase cumulative correction by CORRECTION_STEP_DUTY
-  //   -      : decrease cumulative correction by CORRECTION_STEP_DUTY
-  //
-  // Multiple symbols can be sent together.
-  // Example: "-----" changes correction by -25 if CORRECTION_STEP_DUTY = 5.
-  bool correctionChanged = false;
+  if (HATCHING_MODE) {
+    return;
+  }
 
-  while (Serial.available()) {
+  if (Serial.available()) {
     char c = Serial.read();
 
     if (c == 'r' || c == 'R') {
       rotateEggs();
     }
-    else if (c == '+') {
-      dutyCorrection += CORRECTION_STEP_DUTY;
-      dutyCorrection = clampCorrection(dutyCorrection);
-      correctionChanged = true;
-    }
-    else if (c == '-') {
-      dutyCorrection -= CORRECTION_STEP_DUTY;
-      dutyCorrection = clampCorrection(dutyCorrection);
-      correctionChanged = true;
-    }
   }
 
-  if (correctionChanged) {
-    saveCorrectionToEEPROM(dutyCorrection);
-
-    Serial.print("Manual Corr=");
-    Serial.println(dutyCorrection);
-  }
-
-  if (!HATCHING_MODE &&
-      millis() - lastServoTurnTime >= SERVO_TURN_INTERVAL_MS) {
+  if (millis() - lastServoTurnTime >= SERVO_TURN_INTERVAL_MS) {
     rotateEggs();
   }
 }
@@ -413,8 +372,6 @@ void setup() {
 
   dht1.begin();
   dht2.begin();
-  dht3.begin();
-  dht4.begin();
 
   pinMode(RELAY_HEATER, OUTPUT);
   pinMode(RELAY_HUMIDITY_FAN, OUTPUT);
@@ -459,68 +416,37 @@ void loop() {
   float h2 = dht2.readHumidity();
   float t2 = dht2.readTemperature();
 
-  float h3 = dht3.readHumidity();
-  float t3 = dht3.readTemperature();
-
-  float h4 = dht4.readHumidity();
-  float t4 = dht4.readTemperature();
-
   h1 += HUM_OFFSET_1;
   t1 += TEMP_OFFSET_1;
 
   h2 += HUM_OFFSET_2;
   t2 += TEMP_OFFSET_2;
 
-  h3 += HUM_OFFSET_3;
-  t3 += TEMP_OFFSET_3;
-
-  h4 += HUM_OFFSET_4;
-  t4 += TEMP_OFFSET_4;
-
   bool ok1 = isSensorValid(t1, h1);
   bool ok2 = isSensorValid(t2, h2);
-  bool ok3 = isSensorValid(t3, h3);
-  bool ok4 = isSensorValid(t4, h4);
 
   float usedTemp = 0;
   float usedHum  = 0;
-  int usedCount = 0;
 
-  bool use1 = ok1 && USE_SENSOR_1_IN_AVERAGE;
-  bool use2 = ok2 && USE_SENSOR_2_IN_AVERAGE;
-  bool use3 = ok3 && USE_SENSOR_3_IN_AVERAGE;
-  bool use4 = ok4 && USE_SENSOR_4_IN_AVERAGE;
+  bool anyValid = false;
 
-  if (use1) {
-    usedTemp += t1;
-    usedHum  += h1;
-    usedCount++;
+  if (ok1 && ok2) {
+    usedTemp = (t1 + t2) / 2.0;
+    usedHum  = (h1 + h2) / 2.0;
+    anyValid = true;
+  }
+  else if (ok1) {
+    usedTemp = t1;
+    usedHum  = h1;
+    anyValid = true;
+  }
+  else if (ok2) {
+    usedTemp = t2;
+    usedHum  = h2;
+    anyValid = true;
   }
 
-  if (use2) {
-    usedTemp += t2;
-    usedHum  += h2;
-    usedCount++;
-  }
-
-  if (use3) {
-    usedTemp += t3;
-    usedHum  += h3;
-    usedCount++;
-  }
-
-  if (use4) {
-    usedTemp += t4;
-    usedHum  += h4;
-    usedCount++;
-  }
-
-  bool anyUsedSensor = (usedCount > 0);
-
-  if (anyUsedSensor) {
-    usedTemp /= usedCount;
-    usedHum  /= usedCount;
-
+  if (anyValid) {
     float controlTemp = round1(usedTemp);
 
     heaterDuty = calculateHeaterDuty(controlTemp);
@@ -538,71 +464,27 @@ void loop() {
 
     updateStatusLED(controlTemp, usedHum);
 
-    float maxTemp = -100.0;
-    float minTemp = 100.0;
+    Serial.print("Mode=");
+    Serial.print(HATCHING_MODE ? "HATCH" : "NORMAL");
 
-    if (ok1) {
-      maxTemp = max(maxTemp, t1);
-      minTemp = min(minTemp, t1);
-    }
+    Serial.print(" | S1: ");
 
-    if (ok2) {
-      maxTemp = max(maxTemp, t2);
-      minTemp = min(minTemp, t2);
-    }
-
-    if (ok3) {
-      maxTemp = max(maxTemp, t3);
-      minTemp = min(minTemp, t3);
-    }
-
-    if (ok4) {
-      maxTemp = max(maxTemp, t4);
-      minTemp = min(minTemp, t4);
-    }
-
-    float tempSpread = maxTemp - minTemp;
-
-    Serial.print("S1: ");
     if (ok1) {
       Serial.print(t1, 1);
       Serial.print("C ");
       Serial.print(h1, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_1_IN_AVERAGE ? "A" : "P");
+      Serial.print("%");
     } else {
       Serial.print("ERR");
     }
 
     Serial.print(" | S2: ");
+
     if (ok2) {
       Serial.print(t2, 1);
       Serial.print("C ");
       Serial.print(h2, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_2_IN_AVERAGE ? "A" : "P");
-    } else {
-      Serial.print("ERR");
-    }
-
-    Serial.print(" | S3: ");
-    if (ok3) {
-      Serial.print(t3, 1);
-      Serial.print("C ");
-      Serial.print(h3, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_3_IN_AVERAGE ? "A" : "P");
-    } else {
-      Serial.print("ERR");
-    }
-
-    Serial.print(" | S4: ");
-    if (ok4) {
-      Serial.print(t4, 1);
-      Serial.print("C ");
-      Serial.print(h4, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_4_IN_AVERAGE ? "A" : "P");
+      Serial.print("%");
     } else {
       Serial.print("ERR");
     }
@@ -622,24 +504,15 @@ void loop() {
     Serial.print(" | Heater=");
     Serial.print(heaterOn);
 
-    Serial.print(" | HFan=");
+    Serial.print(" | HumFan=");
     Serial.print(humidityFanOn);
 
     Serial.print(" | Servo=");
     if (HATCHING_MODE) {
-      Serial.print("STOPPED");
+      Serial.println("STOPPED");
     } else {
-      Serial.print(servoAtMax ? "MAX" : "MIN");
+      Serial.println(servoAtMax ? "MAX" : "MIN");
     }
-
-    Serial.print(" | Mode=");
-    Serial.print(HATCHING_MODE ? "HATCH" : "NORMAL");
-
-    Serial.print(" | Spread=");
-    Serial.print(tempSpread, 1);
-
-    Serial.print(" | AvgSensors=");
-    Serial.println(usedCount);
   }
   else {
     heaterOn = false;
@@ -651,7 +524,7 @@ void loop() {
 
     digitalWrite(STATUS_LED_PIN, HIGH);
 
-    Serial.println("Heater: OFF | HumFan: OFF | LED: ON (no sensors selected for average/control)");
+    Serial.println("Heater: OFF | HumFan: OFF | LED: ON (no valid sensors)");
   }
 
   delay(2000);

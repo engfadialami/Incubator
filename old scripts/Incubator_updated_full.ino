@@ -84,7 +84,7 @@ const float HATCH_HUM_HIGH_SETPOINT = 70.0;
 const float NORMAL_LED_TEMP_LOW  = 37.3;
 const float NORMAL_LED_TEMP_HIGH = 37.7;
 const float NORMAL_LED_HUM_LOW   = 45.0;
-const float NORMAL_LED_HUM_HIGH  = 60.0;
+const float NORMAL_LED_HUM_HIGH  = 65.0;
 
 const float HATCH_LED_TEMP_LOW  = 37.0;
 const float HATCH_LED_TEMP_HIGH = 37.4;
@@ -103,19 +103,19 @@ const float SENSOR_TEMP_MAX_C = 60.0;
 // Offset is added to the raw sensor reading before printing and before average.
 // Example: if S3 reads 37.0 but real temperature is 37.5, use TEMP_OFFSET_3 = 0.5.
 
-const float TEMP_OFFSET_1 = 1.3;
+const float TEMP_OFFSET_1 = 1.4;
 const float HUM_OFFSET_1  = 9.0;
 const bool USE_SENSOR_1_IN_AVERAGE = false;   // false = print S1 but exclude from final average/control
 
-const float TEMP_OFFSET_2 = 0.8;
+const float TEMP_OFFSET_2 = 0.9;
 const float HUM_OFFSET_2  = 12.0;
 const bool USE_SENSOR_2_IN_AVERAGE = true;
 
-const float TEMP_OFFSET_3 = 0.4;
+const float TEMP_OFFSET_3 = 0.5;
 const float HUM_OFFSET_3  = 10.0;
 const bool USE_SENSOR_3_IN_AVERAGE = true;
 
-const float TEMP_OFFSET_4 = -0.4;
+const float TEMP_OFFSET_4 = -0.5;
 const float HUM_OFFSET_4  = -6.0;
 const bool USE_SENSOR_4_IN_AVERAGE = false;   // false = print S4 but exclude from final average/control
 
