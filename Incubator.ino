@@ -24,6 +24,9 @@ const bool HATCHING_MODE = false;   // false = normal incubation, true = hatchin
 
 #define STATUS_LED_PIN 13
 
+unsigned long lowEdgeCounter = 0; 
+unsigned long highEdgeCounter = 0;
+const unsigned long EDGE_TIME_LIMIT = 900; // 30 min if loop delay = 2 sec
 // =========================
 // Relay logic
 // =========================
@@ -522,6 +525,34 @@ void loop() {
     usedHum  /= usedCount;
 
     float controlTemp = round1(usedTemp);
+
+    if (controlTemp == 37.4) {
+      lowEdgeCounter++;
+    } else {
+      lowEdgeCounter = 0;
+    }
+
+    if (controlTemp == 37.6) {
+      highEdgeCounter++;
+    } else {
+      highEdgeCounter = 0;
+    }
+
+    if (lowEdgeCounter >= EDGE_TIME_LIMIT) {
+      dutyCorrection += CORRECTION_STEP_DUTY;
+      dutyCorrection = clampCorrection(dutyCorrection);
+      saveCorrectionToEEPROM(dutyCorrection);
+      lowEdgeCounter = 0;
+      Serial.println("Low edge correction applied");
+    }
+
+    if (highEdgeCounter >= EDGE_TIME_LIMIT) {
+      dutyCorrection -= CORRECTION_STEP_DUTY;
+      dutyCorrection = clampCorrection(dutyCorrection);
+      saveCorrectionToEEPROM(dutyCorrection);
+      highEdgeCounter = 0;
+      Serial.println("High edge correction applied");
+    }
 
     heaterDuty = calculateHeaterDuty(controlTemp);
 
