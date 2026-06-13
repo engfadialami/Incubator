@@ -670,7 +670,12 @@ void loop() {
     Serial.print(tempSpread, 1);
 
     Serial.print(" | AvgSensors=");
-    Serial.println(usedCount);
+    Serial.print(usedCount);
+
+    Serial.print(" | LEC=");
+    Serial.print(lowEdgeCounter);
+    Serial.print(" | HEC=");
+    Serial.println(highEdgeCounter);
   }
   else {
     heaterOn = false;
