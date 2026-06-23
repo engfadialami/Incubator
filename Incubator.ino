@@ -106,19 +106,19 @@ const float SENSOR_TEMP_MAX_C = 60.0;
 // Offset is added to the raw sensor reading before printing and before average.
 // Example: if S3 reads 37.0 but real temperature is 37.5, use TEMP_OFFSET_3 = 0.5.
 
-const float TEMP_OFFSET_1 = 1.3;
+const float TEMP_OFFSET_1 = 1.7;
 const float HUM_OFFSET_1  = 9.0;
 const bool USE_SENSOR_1_IN_AVERAGE = false;   // false = print S1 but exclude from final average/control
 
-const float TEMP_OFFSET_2 = 0.8;
+const float TEMP_OFFSET_2 = 1.2;
 const float HUM_OFFSET_2  = 12.0;
 const bool USE_SENSOR_2_IN_AVERAGE = true;
 
-const float TEMP_OFFSET_3 = 0.4;
+const float TEMP_OFFSET_3 = 0.8;
 const float HUM_OFFSET_3  = 10.0;
 const bool USE_SENSOR_3_IN_AVERAGE = true;
 
-const float TEMP_OFFSET_4 = -0.4;
+const float TEMP_OFFSET_4 = 0;
 const float HUM_OFFSET_4  = -6.0;
 const bool USE_SENSOR_4_IN_AVERAGE = false;   // false = print S4 but exclude from final average/control
 
@@ -129,7 +129,7 @@ const int SERVO_MIN_ANGLE = 0;
 const int SERVO_MAX_ANGLE = 180;
 const int SERVO_STEP_DELAY_MS = 15;
 
-const unsigned long SERVO_TURN_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL;
+const unsigned long SERVO_TURN_INTERVAL_MS = 5UL * 60UL * 60UL * 1000UL;
 
 // EEPROM addresses
 const int EEPROM_SERVO_ANGLE_ADDR = 0;
