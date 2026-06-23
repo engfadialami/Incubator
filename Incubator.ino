@@ -5,7 +5,7 @@
 // =========================
 // Mode
 // =========================
-const bool HATCHING_MODE = false;   // false = normal incubation, true = hatching mode
+const bool HATCHING_MODE = false;
 
 // =========================
 // Pin assignment
@@ -22,11 +22,24 @@ const bool HATCHING_MODE = false;   // false = normal incubation, true = hatchin
 #define SERVO_LEFT_PIN   9
 #define SERVO_RIGHT_PIN  11
 
+#define SERVO_POWER_PIN 8
+
 #define STATUS_LED_PIN 13
 
-unsigned long lowEdgeCounter = 0; 
+// =========================
+// Servo power control
+// =========================
+const bool SERVO_POWER_ACTIVE_LOW = true;   // true for most relay modules
+const unsigned long SERVO_POWER_BEFORE_MS = 5000;
+const unsigned long SERVO_POWER_AFTER_MS  = 5000;
+
+// =========================
+// Edge correction
+// =========================
+unsigned long lowEdgeCounter = 0;
 unsigned long highEdgeCounter = 0;
-const unsigned long EDGE_TIME_LIMIT = 900; // 30 min if loop delay = 2 sec
+const unsigned long EDGE_TIME_LIMIT = 900;
+
 // =========================
 // Relay logic
 // =========================
@@ -56,7 +69,6 @@ const float EXACT_BAND = 0.0;
 
 const unsigned long HEATER_WINDOW_MS = 100000;
 
-// Base duties
 const int DUTY_UNDER_SETPOINT = 35;
 const int DUTY_AT_SETPOINT    = 30;
 const int DUTY_OVER_SETPOINT  = 25;
@@ -103,24 +115,21 @@ const float SENSOR_TEMP_MAX_C = 60.0;
 // =========================
 // Sensor offsets and average selection
 // =========================
-// Offset is added to the raw sensor reading before printing and before average.
-// Example: if S3 reads 37.0 but real temperature is 37.5, use TEMP_OFFSET_3 = 0.5.
-
-const float TEMP_OFFSET_1 = 1.7;
+const float TEMP_OFFSET_1 = 1.3;
 const float HUM_OFFSET_1  = 9.0;
-const bool USE_SENSOR_1_IN_AVERAGE = false;   // false = print S1 but exclude from final average/control
+const bool USE_SENSOR_1_IN_AVERAGE = false;
 
-const float TEMP_OFFSET_2 = 1.2;
+const float TEMP_OFFSET_2 = 0.8;
 const float HUM_OFFSET_2  = 12.0;
 const bool USE_SENSOR_2_IN_AVERAGE = true;
 
-const float TEMP_OFFSET_3 = 0.8;
+const float TEMP_OFFSET_3 = 0.4;
 const float HUM_OFFSET_3  = 10.0;
 const bool USE_SENSOR_3_IN_AVERAGE = true;
 
-const float TEMP_OFFSET_4 = 0;
+const float TEMP_OFFSET_4 = -0.4;
 const float HUM_OFFSET_4  = -6.0;
-const bool USE_SENSOR_4_IN_AVERAGE = false;   // false = print S4 but exclude from final average/control
+const bool USE_SENSOR_4_IN_AVERAGE = false;
 
 // =========================
 // Servo settings
@@ -204,6 +213,14 @@ void setRelay(int pin, bool on) {
   }
 }
 
+void setServoPower(bool on) {
+  if (SERVO_POWER_ACTIVE_LOW) {
+    digitalWrite(SERVO_POWER_PIN, on ? LOW : HIGH);
+  } else {
+    digitalWrite(SERVO_POWER_PIN, on ? HIGH : LOW);
+  }
+}
+
 bool isSensorValid(float t, float h) {
   if (isnan(t) || isnan(h)) return false;
   if (t < SENSOR_TEMP_MIN_C) return false;
@@ -229,7 +246,6 @@ int clampCorrection(int value) {
 
 // =========================
 // EEPROM correction functions
-// Stored as correction + 100
 // =========================
 void saveCorrectionToEEPROM(int correction) {
   int storedValue = correction + 100;
@@ -317,6 +333,16 @@ int readServoAngleFromEEPROM() {
 }
 
 void moveServosSmooth(int targetAngle) {
+  setServoPower(true);
+  delay(SERVO_POWER_BEFORE_MS);
+
+  servoLeft.attach(SERVO_LEFT_PIN);
+  servoRight.attach(SERVO_RIGHT_PIN);
+
+  servoLeft.write(currentServoAngle);
+  servoRight.write(currentServoAngle);
+  delay(500);
+
   if (currentServoAngle < targetAngle) {
     for (int angle = currentServoAngle; angle <= targetAngle; angle++) {
       servoLeft.write(angle);
@@ -333,6 +359,13 @@ void moveServosSmooth(int targetAngle) {
 
   currentServoAngle = targetAngle;
   saveServoAngleToEEPROM(currentServoAngle);
+
+  delay(SERVO_POWER_AFTER_MS);
+
+  servoLeft.detach();
+  servoRight.detach();
+
+  setServoPower(false);
 }
 
 void rotateEggs() {
@@ -355,13 +388,6 @@ void rotateEggs() {
 }
 
 void checkServo() {
-  // Serial commands:
-  //   r or R : rotate eggs manually (disabled in hatching mode by rotateEggs())
-  //   +      : increase cumulative correction by CORRECTION_STEP_DUTY
-  //   -      : decrease cumulative correction by CORRECTION_STEP_DUTY
-  //
-  // Multiple symbols can be sent together.
-  // Example: "-----" changes correction by -25 if CORRECTION_STEP_DUTY = 5.
   bool correctionChanged = false;
 
   while (Serial.available()) {
@@ -425,18 +451,15 @@ void setup() {
   setRelay(RELAY_HEATER, false);
   setRelay(RELAY_HUMIDITY_FAN, false);
 
+  pinMode(SERVO_POWER_PIN, OUTPUT);
+  setServoPower(false);
+
   pinMode(STATUS_LED_PIN, OUTPUT);
   digitalWrite(STATUS_LED_PIN, LOW);
 
   dutyCorrection = readCorrectionFromEEPROM();
 
   int savedServoAngle = readServoAngleFromEEPROM();
-
-  servoLeft.attach(SERVO_LEFT_PIN);
-  servoRight.attach(SERVO_RIGHT_PIN);
-
-  servoLeft.write(savedServoAngle);
-  servoRight.write(savedServoAngle);
 
   currentServoAngle = savedServoAngle;
   servoAtMax = (savedServoAngle == SERVO_MAX_ANGLE);
@@ -447,7 +470,9 @@ void setup() {
   Serial.print("System started | Mode=");
   Serial.print(HATCHING_MODE ? "HATCHING" : "NORMAL");
   Serial.print(" | Saved Corr=");
-  Serial.println(dutyCorrection);
+  Serial.print(dutyCorrection);
+  Serial.print(" | Saved Servo=");
+  Serial.println(currentServoAngle);
 }
 
 // =========================
@@ -674,6 +699,7 @@ void loop() {
 
     Serial.print(" | LEC=");
     Serial.print(lowEdgeCounter);
+
     Serial.print(" | HEC=");
     Serial.println(highEdgeCounter);
   }
