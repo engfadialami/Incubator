@@ -1,6 +1,7 @@
 #include <DHT.h>
 #include <Servo.h>
 #include <EEPROM.h>
+#include <SoftwareSerial.h>
 
 // =========================
 // Mode
@@ -25,6 +26,12 @@ const bool HATCHING_MODE = false;
 #define SERVO_POWER_PIN 8
 
 #define STATUS_LED_PIN 13
+
+// =========================
+// Bluetooth HC-05 serial
+// =========================
+#define BT_RX_PIN 12   // Arduino RX  <- HC-05 TX  (green wire)
+#define BT_TX_PIN 10   // Arduino TX  -> HC-05 RX  (yellow wire, through voltage divider)
 
 // =========================
 // Servo power control
@@ -156,6 +163,8 @@ DHT dht4(DHTPIN4, DHTTYPE);
 Servo servoLeft;
 Servo servoRight;
 
+SoftwareSerial BT(BT_RX_PIN, BT_TX_PIN);
+
 // =========================
 // State
 // =========================
@@ -242,6 +251,79 @@ int clampCorrection(int value) {
   if (value > MAX_CUMULATIVE_CORRECTION) return MAX_CUMULATIVE_CORRECTION;
   if (value < -MAX_CUMULATIVE_CORRECTION) return -MAX_CUMULATIVE_CORRECTION;
   return value;
+}
+
+// =========================
+// Serial + Bluetooth printing helpers
+// =========================
+void printBoth(const char *value) {
+  Serial.print(value);
+  BT.print(value);
+}
+
+void printBoth(char value) {
+  Serial.print(value);
+  BT.print(value);
+}
+
+void printBoth(bool value) {
+  Serial.print(value);
+  BT.print(value);
+}
+
+void printBoth(int value) {
+  Serial.print(value);
+  BT.print(value);
+}
+
+void printBoth(unsigned long value) {
+  Serial.print(value);
+  BT.print(value);
+}
+
+void printBoth(float value) {
+  Serial.print(value);
+  BT.print(value);
+}
+
+void printBoth(float value, int digits) {
+  Serial.print(value, digits);
+  BT.print(value, digits);
+}
+
+void printlnBoth(const char *value) {
+  Serial.println(value);
+  BT.println(value);
+}
+
+void printlnBoth(int value) {
+  Serial.println(value);
+  BT.println(value);
+}
+
+void printlnBoth(char value) {
+  Serial.println(value);
+  BT.println(value);
+}
+
+void printlnBoth(bool value) {
+  Serial.println(value);
+  BT.println(value);
+}
+
+void printlnBoth(unsigned long value) {
+  Serial.println(value);
+  BT.println(value);
+}
+
+void printlnBoth(float value) {
+  Serial.println(value);
+  BT.println(value);
+}
+
+void printlnBoth(float value, int digits) {
+  Serial.println(value, digits);
+  BT.println(value, digits);
 }
 
 // =========================
@@ -370,21 +452,37 @@ void moveServosSmooth(int targetAngle) {
 
 void rotateEggs() {
   if (HATCHING_MODE) {
-    Serial.println("Servo: STOPPED (hatching mode)");
+    printlnBoth("Servo: STOPPED (hatching mode)");
     return;
   }
 
   if (servoAtMax) {
     moveServosSmooth(SERVO_MIN_ANGLE);
     servoAtMax = false;
-    Serial.println("Servo: MIN");
+    printlnBoth("Servo: MIN");
   } else {
     moveServosSmooth(SERVO_MAX_ANGLE);
     servoAtMax = true;
-    Serial.println("Servo: MAX");
+    printlnBoth("Servo: MAX");
   }
 
   lastServoTurnTime = millis();
+}
+
+void handleServoCommand(char c, bool &correctionChanged) {
+  if (c == 'r' || c == 'R') {
+    rotateEggs();
+  }
+  else if (c == '+') {
+    dutyCorrection += CORRECTION_STEP_DUTY;
+    dutyCorrection = clampCorrection(dutyCorrection);
+    correctionChanged = true;
+  }
+  else if (c == '-') {
+    dutyCorrection -= CORRECTION_STEP_DUTY;
+    dutyCorrection = clampCorrection(dutyCorrection);
+    correctionChanged = true;
+  }
 }
 
 void checkServo() {
@@ -392,27 +490,19 @@ void checkServo() {
 
   while (Serial.available()) {
     char c = Serial.read();
+    handleServoCommand(c, correctionChanged);
+  }
 
-    if (c == 'r' || c == 'R') {
-      rotateEggs();
-    }
-    else if (c == '+') {
-      dutyCorrection += CORRECTION_STEP_DUTY;
-      dutyCorrection = clampCorrection(dutyCorrection);
-      correctionChanged = true;
-    }
-    else if (c == '-') {
-      dutyCorrection -= CORRECTION_STEP_DUTY;
-      dutyCorrection = clampCorrection(dutyCorrection);
-      correctionChanged = true;
-    }
+  while (BT.available()) {
+    char c = BT.read();
+    handleServoCommand(c, correctionChanged);
   }
 
   if (correctionChanged) {
     saveCorrectionToEEPROM(dutyCorrection);
 
-    Serial.print("Manual Corr=");
-    Serial.println(dutyCorrection);
+    printBoth("Manual Corr=");
+    printlnBoth(dutyCorrection);
   }
 
   if (!HATCHING_MODE &&
@@ -439,6 +529,7 @@ void updateStatusLED(float controlTemp, float usedHum) {
 
 void setup() {
   Serial.begin(9600);
+  BT.begin(9600);
 
   dht1.begin();
   dht2.begin();
@@ -467,12 +558,12 @@ void setup() {
   lastServoTurnTime = millis();
   lastCorrectionTime = millis();
 
-  Serial.print("System started | Mode=");
-  Serial.print(HATCHING_MODE ? "HATCHING" : "NORMAL");
-  Serial.print(" | Saved Corr=");
-  Serial.print(dutyCorrection);
-  Serial.print(" | Saved Servo=");
-  Serial.println(currentServoAngle);
+  printBoth("System started | Mode=");
+  printBoth(HATCHING_MODE ? "HATCHING" : "NORMAL");
+  printBoth(" | Saved Corr=");
+  printBoth(dutyCorrection);
+  printBoth(" | Saved Servo=");
+  printlnBoth(currentServoAngle);
 }
 
 // =========================
@@ -568,7 +659,7 @@ void loop() {
       dutyCorrection = clampCorrection(dutyCorrection);
       saveCorrectionToEEPROM(dutyCorrection);
       lowEdgeCounter = 0;
-      Serial.println("Low edge correction applied");
+      printlnBoth("Low edge correction applied");
     }
 
     if (highEdgeCounter >= EDGE_TIME_LIMIT) {
@@ -576,7 +667,7 @@ void loop() {
       dutyCorrection = clampCorrection(dutyCorrection);
       saveCorrectionToEEPROM(dutyCorrection);
       highEdgeCounter = 0;
-      Serial.println("High edge correction applied");
+      printlnBoth("High edge correction applied");
     }
 
     heaterDuty = calculateHeaterDuty(controlTemp);
@@ -597,111 +688,128 @@ void loop() {
     float maxTemp = -100.0;
     float minTemp = 100.0;
 
-    if (ok1) {
+    if (use1) {
       maxTemp = max(maxTemp, t1);
       minTemp = min(minTemp, t1);
     }
 
-    if (ok2) {
+    if (use2) {
       maxTemp = max(maxTemp, t2);
       minTemp = min(minTemp, t2);
     }
 
-    if (ok3) {
+    if (use3) {
       maxTemp = max(maxTemp, t3);
       minTemp = min(minTemp, t3);
     }
 
-    if (ok4) {
+    if (use4) {
       maxTemp = max(maxTemp, t4);
       minTemp = min(minTemp, t4);
     }
 
     float tempSpread = maxTemp - minTemp;
 
-    Serial.print("S1: ");
+    int rotationRemainingMin = 0;
+
+    if (!HATCHING_MODE) {
+      unsigned long elapsedRotationMs = millis() - lastServoTurnTime;
+
+      if (elapsedRotationMs < SERVO_TURN_INTERVAL_MS) {
+        rotationRemainingMin = (int)((SERVO_TURN_INTERVAL_MS - elapsedRotationMs) / 60000UL);
+      }
+    }
+
+    printBoth("S1: ");
     if (ok1) {
-      Serial.print(t1, 1);
-      Serial.print("C ");
-      Serial.print(h1, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_1_IN_AVERAGE ? "A" : "P");
+      printBoth(t1, 1);
+      printBoth("C ");
+      printBoth(h1, 1);
+      printBoth("% ");
+      printBoth(USE_SENSOR_1_IN_AVERAGE ? "A" : "P");
     } else {
-      Serial.print("ERR");
+      printBoth("ERR");
     }
 
-    Serial.print(" | S2: ");
+    printBoth(" | S2: ");
     if (ok2) {
-      Serial.print(t2, 1);
-      Serial.print("C ");
-      Serial.print(h2, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_2_IN_AVERAGE ? "A" : "P");
+      printBoth(t2, 1);
+      printBoth("C ");
+      printBoth(h2, 1);
+      printBoth("% ");
+      printBoth(USE_SENSOR_2_IN_AVERAGE ? "A" : "P");
     } else {
-      Serial.print("ERR");
+      printBoth("ERR");
     }
 
-    Serial.print(" | S3: ");
+    printBoth(" | S3: ");
     if (ok3) {
-      Serial.print(t3, 1);
-      Serial.print("C ");
-      Serial.print(h3, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_3_IN_AVERAGE ? "A" : "P");
+      printBoth(t3, 1);
+      printBoth("C ");
+      printBoth(h3, 1);
+      printBoth("% ");
+      printBoth(USE_SENSOR_3_IN_AVERAGE ? "A" : "P");
     } else {
-      Serial.print("ERR");
+      printBoth("ERR");
     }
 
-    Serial.print(" | S4: ");
+    printBoth(" | S4: ");
     if (ok4) {
-      Serial.print(t4, 1);
-      Serial.print("C ");
-      Serial.print(h4, 1);
-      Serial.print("% ");
-      Serial.print(USE_SENSOR_4_IN_AVERAGE ? "A" : "P");
+      printBoth(t4, 1);
+      printBoth("C ");
+      printBoth(h4, 1);
+      printBoth("% ");
+      printBoth(USE_SENSOR_4_IN_AVERAGE ? "A" : "P");
     } else {
-      Serial.print("ERR");
+      printBoth("ERR");
     }
 
-    Serial.print(" | T=");
-    Serial.print(controlTemp, 1);
+    printBoth(" | T=");
+    printBoth(controlTemp, 1);
 
-    Serial.print(" | H=");
-    Serial.print(usedHum, 1);
+    printBoth(" | H=");
+    printBoth(usedHum, 1);
 
-    Serial.print(" | Duty=");
-    Serial.print(heaterDuty);
+    printBoth(" | Duty=");
+    printBoth(heaterDuty);
 
-    Serial.print(" | Corr=");
-    Serial.print(dutyCorrection);
+    printBoth(" | Corr=");
+    printBoth(dutyCorrection);
 
-    Serial.print(" | Heater=");
-    Serial.print(heaterOn);
+    printBoth(" | Htr=");
+    printBoth(heaterOn);
 
-    Serial.print(" | HFan=");
-    Serial.print(humidityFanOn);
+    printBoth(" | HFan=");
+    printBoth(humidityFanOn);
 
-    Serial.print(" | Servo=");
+    printBoth(" | Servo=");
     if (HATCHING_MODE) {
-      Serial.print("STOPPED");
+      printBoth("STOPPED");
     } else {
-      Serial.print(servoAtMax ? "MAX" : "MIN");
+      printBoth(servoAtMax ? "MAX" : "MIN");
     }
 
-    Serial.print(" | Mode=");
-    Serial.print(HATCHING_MODE ? "HATCH" : "NORMAL");
+    printBoth(" | Mod=");
+    printBoth(HATCHING_MODE ? "HTCH" : "NRML");
 
-    Serial.print(" | Spread=");
-    Serial.print(tempSpread, 1);
+    printBoth(" | Sprd=");
+    printBoth(tempSpread, 1);
 
-    Serial.print(" | AvgSensors=");
-    Serial.print(usedCount);
+    printBoth(" | AvgSens=");
+    printBoth(usedCount);
 
-    Serial.print(" | LEC=");
-    Serial.print(lowEdgeCounter);
+    printBoth(" | RotMin=");
+    if (HATCHING_MODE) {
+      printBoth("STOP");
+    } else {
+      printBoth(rotationRemainingMin);
+    }
 
-    Serial.print(" | HEC=");
-    Serial.println(highEdgeCounter);
+    printBoth(" | LEC=");
+    printBoth(lowEdgeCounter);
+
+    printBoth(" | HEC=");
+    printlnBoth(highEdgeCounter);
   }
   else {
     heaterOn = false;
@@ -713,7 +821,7 @@ void loop() {
 
     digitalWrite(STATUS_LED_PIN, HIGH);
 
-    Serial.println("Heater: OFF | HumFan: OFF | LED: ON (no sensors selected for average/control)");
+    printlnBoth("Heater: OFF | HumFan: OFF | LED: ON (no sensors selected for average/control)");
   }
 
   delay(2000);
