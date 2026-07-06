@@ -6,7 +6,7 @@
 // =========================
 // Mode
 // =========================
-const bool HATCHING_MODE = true;
+bool hatchingMode = true;
 
 // =========================
 // Pin assignment
@@ -165,6 +165,9 @@ Servo servoRight;
 
 SoftwareSerial BT(BT_RX_PIN, BT_TX_PIN);
 
+String serialCommandBuffer = "";
+String btCommandBuffer = "";
+
 // =========================
 // State
 // =========================
@@ -180,35 +183,35 @@ unsigned long lastServoTurnTime = 0;
 // Active mode helper functions
 // =========================
 float activeSetpoint() {
-  return HATCHING_MODE ? HATCH_SETPOINT_C : NORMAL_SETPOINT_C;
+  return hatchingMode ? HATCH_SETPOINT_C : NORMAL_SETPOINT_C;
 }
 
 float activeAlwaysOnBelow() {
-  return HATCHING_MODE ? HATCH_ALWAYS_ON_BELOW_C : NORMAL_ALWAYS_ON_BELOW_C;
+  return hatchingMode ? HATCH_ALWAYS_ON_BELOW_C : NORMAL_ALWAYS_ON_BELOW_C;
 }
 
 float activeAlwaysOffAbove() {
-  return HATCHING_MODE ? HATCH_ALWAYS_OFF_ABOVE_C : NORMAL_ALWAYS_OFF_ABOVE_C;
+  return hatchingMode ? HATCH_ALWAYS_OFF_ABOVE_C : NORMAL_ALWAYS_OFF_ABOVE_C;
 }
 
 float activeCorrectionHigh() {
-  return HATCHING_MODE ? HATCH_CORRECTION_HIGH_TEMP_C : NORMAL_CORRECTION_HIGH_TEMP_C;
+  return hatchingMode ? HATCH_CORRECTION_HIGH_TEMP_C : NORMAL_CORRECTION_HIGH_TEMP_C;
 }
 
 float activeCorrectionLow() {
-  return HATCHING_MODE ? HATCH_CORRECTION_LOW_TEMP_C : NORMAL_CORRECTION_LOW_TEMP_C;
+  return hatchingMode ? HATCH_CORRECTION_LOW_TEMP_C : NORMAL_CORRECTION_LOW_TEMP_C;
 }
 
 float activeHumLow() {
-  return HATCHING_MODE ? HATCH_HUM_LOW_SETPOINT : NORMAL_HUM_LOW_SETPOINT;
+  return hatchingMode ? HATCH_HUM_LOW_SETPOINT : NORMAL_HUM_LOW_SETPOINT;
 }
 
 float activeHumHigh() {
-  return HATCHING_MODE ? HATCH_HUM_HIGH_SETPOINT : NORMAL_HUM_HIGH_SETPOINT;
+  return hatchingMode ? HATCH_HUM_HIGH_SETPOINT : NORMAL_HUM_HIGH_SETPOINT;
 }
 
 int activeCorrectionEEPROMAddress() {
-  return HATCHING_MODE ? EEPROM_HATCH_CORRECTION_ADDR : EEPROM_NORMAL_CORRECTION_ADDR;
+  return hatchingMode ? EEPROM_HATCH_CORRECTION_ADDR : EEPROM_NORMAL_CORRECTION_ADDR;
 }
 
 // =========================
@@ -451,7 +454,7 @@ void moveServosSmooth(int targetAngle) {
 }
 
 void rotateEggs() {
-  if (HATCHING_MODE) {
+  if (hatchingMode) {
     printlnBoth("Servo: STOPPED (hatching mode)");
     return;
   }
@@ -467,6 +470,49 @@ void rotateEggs() {
   }
 
   lastServoTurnTime = millis();
+}
+
+void switchMode(bool hatchMode) {
+  if (hatchingMode == hatchMode) {
+    printBoth("Mode already ");
+    printlnBoth(hatchingMode ? "HATCHING" : "NORMAL");
+    return;
+  }
+
+  saveCorrectionToEEPROM(dutyCorrection);
+
+  hatchingMode = hatchMode;
+  dutyCorrection = readCorrectionFromEEPROM();
+
+  lowEdgeCounter = 0;
+  highEdgeCounter = 0;
+  lastCorrectionTime = millis();
+  lastServoTurnTime = millis();
+
+  printBoth("Mode changed to ");
+  printBoth(hatchingMode ? "HATCHING" : "NORMAL");
+  printBoth(" | Corr=");
+  printlnBoth(dutyCorrection);
+}
+
+bool handleModeCommand(String command) {
+  command.trim();
+
+  if (command.length() == 0) {
+    return false;
+  }
+
+  if (command.equalsIgnoreCase("Hatch")) {
+    switchMode(true);
+    return true;
+  }
+
+  if (command.equalsIgnoreCase("Normal")) {
+    switchMode(false);
+    return true;
+  }
+
+  return false;
 }
 
 void handleServoCommand(char c, bool &correctionChanged) {
@@ -485,17 +531,38 @@ void handleServoCommand(char c, bool &correctionChanged) {
   }
 }
 
+void handleIncomingChar(char c, String &commandBuffer, bool &correctionChanged) {
+  if (isAlpha(c)) {
+    commandBuffer += c;
+
+    if (handleModeCommand(commandBuffer)) {
+      commandBuffer = "";
+    }
+
+    return;
+  }
+
+  if (c == '\n' || c == '\r' || c == ' ' || c == '\t') {
+    handleModeCommand(commandBuffer);
+    commandBuffer = "";
+    return;
+  }
+
+  commandBuffer = "";
+  handleServoCommand(c, correctionChanged);
+}
+
 void checkServo() {
   bool correctionChanged = false;
 
   while (Serial.available()) {
     char c = Serial.read();
-    handleServoCommand(c, correctionChanged);
+    handleIncomingChar(c, serialCommandBuffer, correctionChanged);
   }
 
   while (BT.available()) {
     char c = BT.read();
-    handleServoCommand(c, correctionChanged);
+    handleIncomingChar(c, btCommandBuffer, correctionChanged);
   }
 
   if (correctionChanged) {
@@ -505,7 +572,7 @@ void checkServo() {
     printlnBoth(dutyCorrection);
   }
 
-  if (!HATCHING_MODE &&
+  if (!hatchingMode &&
       millis() - lastServoTurnTime >= SERVO_TURN_INTERVAL_MS) {
     rotateEggs();
   }
@@ -514,7 +581,7 @@ void checkServo() {
 void updateStatusLED(float controlTemp, float usedHum) {
   bool systemOK;
 
-  if (HATCHING_MODE) {
+  if (hatchingMode) {
     systemOK =
       (controlTemp >= HATCH_LED_TEMP_LOW && controlTemp <= HATCH_LED_TEMP_HIGH) &&
       (usedHum >= HATCH_LED_HUM_LOW && usedHum <= HATCH_LED_HUM_HIGH);
@@ -559,7 +626,7 @@ void setup() {
   lastCorrectionTime = millis();
 
   printBoth("System started | Mode=");
-  printBoth(HATCHING_MODE ? "HATCHING" : "NORMAL");
+  printBoth(hatchingMode ? "HATCHING" : "NORMAL");
   printBoth(" | Saved Corr=");
   printBoth(dutyCorrection);
   printBoth(" | Saved Servo=");
@@ -712,7 +779,7 @@ void loop() {
 
     int rotationRemainingMin = 0;
 
-    if (!HATCHING_MODE) {
+    if (!hatchingMode) {
       unsigned long elapsedRotationMs = millis() - lastServoTurnTime;
 
       if (elapsedRotationMs < SERVO_TURN_INTERVAL_MS) {
@@ -783,14 +850,14 @@ void loop() {
     printBoth(humidityFanOn);
 
     printBoth(" | Servo=");
-    if (HATCHING_MODE) {
+    if (hatchingMode) {
       printBoth("STOPPED");
     } else {
       printBoth(servoAtMax ? "MAX" : "MIN");
     }
 
     printBoth(" | Mod=");
-    printBoth(HATCHING_MODE ? "HTCH" : "NRML");
+    printBoth(hatchingMode ? "HTCH" : "NRML");
 
     printBoth(" | Sprd=");
     printBoth(tempSpread, 1);
@@ -799,7 +866,7 @@ void loop() {
     printBoth(usedCount);
 
     printBoth(" | RotMin=");
-    if (HATCHING_MODE) {
+    if (hatchingMode) {
       printBoth("STOP");
     } else {
       printBoth(rotationRemainingMin);
