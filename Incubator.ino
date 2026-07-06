@@ -6,7 +6,7 @@
 // =========================
 // Mode
 // =========================
-const bool HATCHING_MODE = false;
+const bool HATCHING_MODE = true;
 
 // =========================
 // Pin assignment
@@ -65,7 +65,7 @@ const float NORMAL_CORRECTION_LOW_TEMP_C  = 37.3;
 // =========================
 // Temperature control - hatching mode
 // =========================
-const float HATCH_SETPOINT_C = 37.2;
+const float HATCH_SETPOINT_C = 37.3;
 const float HATCH_ALWAYS_ON_BELOW_C  = 36.9;
 const float HATCH_ALWAYS_OFF_ABOVE_C = 37.5;
 
