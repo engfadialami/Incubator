@@ -6,7 +6,7 @@
 // =========================
 // Mode
 // =========================
-bool hatchingMode = true;
+bool hatchingMode = false;
 
 // =========================
 // Pin assignment
@@ -532,6 +532,11 @@ void handleServoCommand(char c, bool &correctionChanged) {
 }
 
 void handleIncomingChar(char c, String &commandBuffer, bool &correctionChanged) {
+  if ((c == 'r' || c == 'R') && commandBuffer.length() == 0) {
+    handleServoCommand(c, correctionChanged);
+    return;
+  }
+
   if (isAlpha(c)) {
     commandBuffer += c;
 
